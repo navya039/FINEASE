@@ -2,13 +2,12 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 import datetime
+from bson import ObjectId # Import ObjectId for json_encoders
 
 class ChatMessage(BaseModel):
     """
     Represents a single chat message in the conversation.
     """
-    # We will handle the conversion of ObjectId to string directly when fetching from DB.
-    # So, 'id' is always treated as a string by Pydantic.
     id: Optional[str] = Field(alias='_id', default=None)
     user_id: str = Field(..., min_length=1, max_length=50)
     message: str = Field(..., min_length=1)
@@ -17,7 +16,10 @@ class ChatMessage(BaseModel):
 
     class Config:
         populate_by_name = True
-        # No arbitrary_types_allowed = True is needed because we're not using custom types
+        # CRUCIAL for Pydantic 1.x to handle ObjectId serialization to string
+        json_encoders = {
+            ObjectId: str
+        }
         json_schema_extra = {
             "example": {
                 "user_id": "user123",
