@@ -9,9 +9,7 @@ from compare_module.utils import extract_text_from_pdf
 import motor.motor_asyncio
 from dotenv import load_dotenv
 
-# Load environment variables (like MONGO_URL) as early as possible
 load_dotenv()
-print("DEBUG: MONGO_URL =", os.getenv("MONGO_URL"))
 
 app = FastAPI(
     title="FinEasy Backend API",
@@ -19,11 +17,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# --- CORS Middleware ---
 origins = [
     "http://localhost",
-    "http://localhost:3003",  # Default React dev server port
-    # Add any other frontend URLs if needed
+    "http://localhost:3003",
 ]
 
 app.add_middleware(
@@ -33,12 +29,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --- END CORS Middleware ---
 
-# All API endpoints will be accessed via /api/
 app.include_router(chat.router, prefix="/api")
 
-# --- Database Connection Management ---
 client = None
 database = None
 
@@ -66,20 +59,18 @@ async def shutdown_db_client():
         client.close()
         print("INFO: Disconnected from MongoDB Atlas.")
 
-# --- Root Endpoint ---
 @app.get("/")
 async def root():
     return {"message": "FinEasy Backend is working! Visit /docs for API documentation."}
 
-# --- Compare Endpoint ---
 @app.post("/compare/")
 async def compare_docs(
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     min_interest: float = Form(0.0),
-    max_lockin: int = Form(100)
+    max_lockin: int = Form(100),
+    product_type: str = Form("loan")  # "loan" or "fd"
 ):
-    # Read and extract text
     if file1.filename.endswith('.pdf'):
         text1 = extract_text_from_pdf(file1.file)
     else:
@@ -89,24 +80,26 @@ async def compare_docs(
     else:
         text2 = (await file2.read()).decode()
 
-    # Summarize
     summarizer = Summarizer()
     summary1 = summarizer.summarize(text1)
     summary2 = summarizer.summarize(text2)
 
-    # Extract fields
     data1 = {
-        'interest': extract_interest(summary1),
-        'lockin': extract_lockin(summary1)
+        'interest': extract_interest(text1),
+        'lockin': extract_lockin(text1)
     }
     data2 = {
-        'interest': extract_interest(summary2),
-        'lockin': extract_lockin(summary2)
+        'interest': extract_interest(text2),
+        'lockin': extract_lockin(text2)
     }
 
-    user_prefs = {'min_interest': min_interest, 'max_lockin': max_lockin}
-    score1 = score(data1, user_prefs)
-    score2 = score(data2, user_prefs)
+    user_prefs = {
+        'min_interest': min_interest,
+        'max_lockin': max_lockin
+    }
+
+    score1 = score(data1, user_prefs, product_type)
+    score2 = score(data2, user_prefs, product_type)
 
     if score1 > score2:
         recommendation = "Document 1 is better"
@@ -120,3 +113,13 @@ async def compare_docs(
         "doc1": {"summary": summary1, "data": data1, "score": score1},
         "doc2": {"summary": summary2, "data": data2, "score": score2}
     }
+
+@app.post("/extract-fields/")
+async def extract_fields_endpoint(file: UploadFile = File(...)):
+    if file.filename.endswith('.pdf'):
+        text = extract_text_from_pdf(file.file)
+    else:
+        text = (await file.read()).decode()
+    interest = extract_interest(text)
+    lockin = extract_lockin(text)
+    return {"interest": interest, "lockin": lockin}
