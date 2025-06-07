@@ -21,6 +21,8 @@ function App() {
   const [isSendingMessage, setIsSendingMessage] = useState(false); // Loading state for sending general messages
   const [isAutoExplaining, setIsAutoExplaining] = useState(false); // New loading state for automatic explanation
 
+  // Removed messageIdCounter state as crypto.randomUUID() will be used for keys
+
 
   // Dummy user accounts for the account management view
   const [linkedAccounts, setLinkedAccounts] = useState([
@@ -97,8 +99,9 @@ function App() {
     setIsGettingAdvice(true);
     const prompt = `Based on the following query, provide financial advice or insights. If the query is not financial, politely state that you can only provide financial advice. Query: "${userMessage}"`;
 
-    // Add a temporary AI message with a typing indicator
-    const adviceMessageId = Date.now();
+    // Generate a unique ID for the advice message using crypto.randomUUID()
+    const adviceMessageId = crypto.randomUUID();
+
     setMessages((prevMessages) => [
       ...prevMessages,
       { id: adviceMessageId, text: "Finease is generating financial advice...", sender: 'ai', timestamp: getTimestamp(), isTyping: true },
@@ -124,93 +127,116 @@ function App() {
   };
 
 
-  // Handle sending a message (now considers selectedFiles as context)
+  // Handle sending a message (now combines input and staged files)
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (inputMessage.trim()) {
-      setIsSendingMessage(true);
-      const userMsg = inputMessage; // Store user message for later use
 
-      let promptToSend = userMsg;
-      let isWordExplanationRequest = false;
-      let termToExplain = '';
+    const hasInputMessage = inputMessage.trim() !== '';
+    const hasSelectedFiles = selectedFiles.length > 0;
 
-      const explainKeywords = ['explain', 'what is', 'define'];
-      const lowerCaseUserMsg = userMsg.toLowerCase();
+    if (!hasInputMessage && !hasSelectedFiles) {
+      return; // Nothing to send
+    }
 
-      let combinedFileContent = '';
-      if (selectedFiles.length > 0) {
-        combinedFileContent = selectedFiles.map(file => file.simulatedContent).join('\n\n--- End of Document ---\n\n');
-      }
+    setIsSendingMessage(true); // Indicate that a message is being sent
+    let promptToSend = '';
+    const currentUserMessage = inputMessage; // Capture current input message for user display
 
-      if (selectedFiles.length > 0) {
-        for (const keyword of explainKeywords) {
-          // Check for "explain term" or "what is term" at the beginning of the message
-          if (lowerCaseUserMsg.startsWith(keyword + ' ')) {
-            termToExplain = userMsg.substring(keyword.length).trim();
+    let combinedFileContent = '';
+    if (hasSelectedFiles) {
+      combinedFileContent = selectedFiles.map(file => file.simulatedContent).join('\n\n--- End of Document ---\n\n');
+    }
+
+    // Determine if it's a word explanation request
+    let isWordExplanationRequest = false;
+    let termToExplain = '';
+    const explainKeywords = ['explain', 'what is', 'define'];
+    const lowerCaseUserMsg = currentUserMessage.toLowerCase();
+
+    for (const keyword of explainKeywords) {
+        if (lowerCaseUserMsg.startsWith(keyword + ' ')) {
+            termToExplain = currentUserMessage.substring(keyword.length).trim();
             isWordExplanationRequest = true;
             break;
-          }
-          // Check for "some text explain term" or "some text what is term"
-          else if (lowerCaseUserMsg.includes(` ${keyword} `)) {
-            const parts = lowerCaseUserMsg.split(new RegExp(`\\s${keyword}\\s`)); // Split by space + keyword + space
+        } else if (lowerCaseUserMsg.includes(` ${keyword} `)) {
+            const parts = lowerCaseUserMsg.split(new RegExp(`\\s${keyword}\\s`));
             if (parts.length > 1) {
-              termToExplain = parts[1].trim();
-              isWordExplanationRequest = true;
-              break;
+                termToExplain = parts[1].trim();
+                isWordExplanationRequest = true;
+                break;
             }
-          }
         }
+    }
 
-        if (isWordExplanationRequest && termToExplain) {
-          promptToSend = `Explain the term "${termToExplain}" as it is used or implied in the following document content:\n\n"${combinedFileContent}"\n\nIf the term is not directly in the document, explain it generally in a financial context. Keep the explanation concise.`;
-        } else {
-          // Original logic for general questions about the document
-          promptToSend = `Given the following document content:\n\n"${combinedFileContent}"\n\nAnd the user's question: "${userMsg}"\n\nPlease provide a relevant response.`;
-        }
+    // Add user message to chat here with unique ID
+    const userMessageId = crypto.randomUUID();
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { id: userMessageId, text: currentUserMessage, sender: 'user', timestamp: getTimestamp() },
+    ]);
+    
+    setInputMessage(''); // Clear input immediately after capturing it
+
+    // Construct the prompt based on available data
+    if (hasSelectedFiles) {
+      if (isWordExplanationRequest && termToExplain) {
+        promptToSend = `Explain the term "${termToExplain}" as it is used or implied in the following document content:\n\n"${combinedFileContent}"\n\nIf the term is not directly in the document, explain it generally in a financial context. Keep the explanation concise.`;
+      } else if (hasInputMessage) {
+        // User provided a query and files
+        promptToSend = `Given the following document content:\n\n"${combinedFileContent}"\n\nAnd the user's question: "${currentUserMessage}"\n\nPlease provide a relevant response.`;
       } else {
-        // No file selected, just use the user's message for general advice
-        promptToSend = `Provide financial advice or insights based on this query: "${userMsg}". If the query is not financial, politely state that you can only provide financial advice.`;
+        // Only files were staged, user clicked send without typing (auto-explain)
+        promptToSend = `Provide a brief overview of the key information contained in the following combined document content: "${combinedFileContent}"`;
+        setIsAutoExplaining(true);
       }
+    } else {
+      // No files, just user message (regular chat)
+      promptToSend = `Provide financial advice or insights based on this query: "${currentUserMessage}". If the query is not financial, politely state that you can only provide financial advice.`;
+    }
 
+    // Add a temporary AI message with a typing indicator
+    const aiResponseId = crypto.randomUUID(); // Use crypto.randomUUID() for unique ID
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { id: aiResponseId, text: "Finease is thinking...", sender: 'ai', timestamp: getTimestamp(), isTyping: true },
+    ]);
 
-      // Add user message with timestamp
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: Date.now(), text: userMsg, sender: 'user', timestamp: getTimestamp() },
-      ]);
-      setInputMessage(''); // Clear input immediately
-
-      // Add a temporary AI message with a typing indicator
-      const aiResponseId = Date.now() + 1;
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: aiResponseId, text: "Finease is thinking...", sender: 'ai', timestamp: getTimestamp(), isTyping: true },
-      ]);
-
-      try {
-        const aiResponse = await callGeminiAPI(promptToSend);
-        // Update the temporary AI message with the actual response
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === aiResponseId ? { ...msg, text: aiResponse, isTyping: false, hasAdviceButton: !isWordExplanationRequest, userQueryForAdvice: userMsg } : msg
-          )
-        );
-      } catch (error) {
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === aiResponseId ? { ...msg, text: `Error: ${error.message}`, isTyping: false } : msg
-          )
-        );
-      } finally {
-        setIsSendingMessage(false);
-      }
+    try {
+      const aiResponse = await callGeminiAPI(promptToSend);
+      setMessages((prevMessages) => {
+        const newMessages = [...prevMessages];
+        const aiMessageIndex = newMessages.findIndex(msg => msg.id === aiResponseId);
+        if (aiMessageIndex !== -1) {
+          newMessages[aiMessageIndex] = {
+            ...newMessages[aiMessageIndex],
+            text: aiResponse,
+            isTyping: false,
+            hasAdviceButton: hasInputMessage && !isWordExplanationRequest,
+            userQueryForAdvice: currentUserMessage,
+            isWordExplanation: isWordExplanationRequest
+          };
+        }
+        return newMessages;
+      });
+    } catch (error) {
+      setMessages((prevMessages) => {
+        const newMessages = [...prevMessages];
+        const aiMessageIndex = newMessages.findIndex(msg => msg.id === aiResponseId);
+        if (aiMessageIndex !== -1) {
+          newMessages[aiMessageIndex] = { ...newMessages[aiMessageIndex], text: `Error: ${error.message}`, isTyping: false };
+        }
+        return newMessages;
+      });
+    } finally {
+      setIsSendingMessage(false);
+      setIsAutoExplaining(false); // Reset auto-explaining state
+      setSelectedFiles([]); // Clear selected files after they have been processed by send button
     }
   };
 
-  // Handle file upload
-  const handleFileUpload = async (event) => { // Made async to await AI response
-    const files = Array.from(event.target.files); // Get all selected files
+  // Handle file upload (only stages files, does not trigger AI immediately)
+  const handleFileUpload = async (event) => {
+    const files = Array.from(event.target.files);
     if (files.length > 0) {
       const newSelectedFiles = [];
       const uploadedFileNames = [];
@@ -218,7 +244,8 @@ function App() {
 
       for (const file of files) {
         const fileExtension = file.name.split('.').pop().toUpperCase();
-        // Simulate file content based on file name - made more detailed
+        // Simulate file content. In a real app, you'd extract text from file here.
+        // For images, this would involve an OCR library to get text from images.
         const simulatedContent = `This is a comprehensive financial report for the fiscal year 2023. Key highlights include a 15% increase in revenue driven by strong performance in the tech sector, and a 10% growth in net profit. The investment portfolio saw a 8% return, with significant gains in renewable energy stocks. Future projections indicate continued expansion into emerging markets and a focus on sustainable investments. Risk factors include market volatility and geopolitical uncertainties. The report also details executive compensation and corporate social responsibility initiatives.`;
 
         newSelectedFiles.push({
@@ -230,21 +257,16 @@ function App() {
         combinedSimulatedContent += simulatedContent + '\n\n'; // Combine content
       }
 
-      setSelectedFiles(newSelectedFiles); // Update the state with all newly selected files
+      setSelectedFiles(newSelectedFiles); // Stage the files
 
-      // Add a single user message indicating all file uploads
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: Date.now(), text: `Uploaded files: ${uploadedFileNames.join(', ')}`, sender: 'user', timestamp: getTimestamp() },
-      ]);
+      // Add a single AI message that acts as the combined file card, informing user about staged files
+      const fileCardMessageId = crypto.randomUUID(); // Use crypto.randomUUID() for unique ID
 
-      // Add a single AI message that acts as the combined file card
-      const fileCardMessageId = Date.now() + Math.random();
       setMessages((prevMessages) => [
         ...prevMessages,
         {
           id: fileCardMessageId,
-          sender: 'ai',
+          sender: 'ai', // This is still considered an 'ai' message as it's system feedback
           timestamp: getTimestamp(),
           type: 'file_attachment', // Custom type for file display
           fileDetails: {
@@ -252,45 +274,18 @@ function App() {
             types: newSelectedFiles.map(f => f.type), // Store all types
             simulatedContent: combinedSimulatedContent, // Store combined content
           },
-          text: `The following files were received: ${uploadedFileNames.join(', ')}.`,
+          text: `Files uploaded: ${uploadedFileNames.join(', ')}. Type your question and click send.`,
         },
       ]);
 
-      setInputMessage(''); // Clear input message
-      event.target.value = null; // Clear the input so same file can be uploaded again
-
-      // Automatically trigger explanation of the combined files
-      setIsAutoExplaining(true);
-      const autoExplainPrompt = `Provide a brief overview of the key information contained in the following combined document content:\n\n"${combinedSimulatedContent}"`;
-      const autoExplainMessageId = Date.now() + Math.random();
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: autoExplainMessageId, text: `Finease is analyzing the uploaded documents...`, sender: 'ai', timestamp: getTimestamp(), isTyping: true },
-      ]);
-
-      try {
-        const autoExplanation = await callGeminiAPI(autoExplainPrompt);
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === autoExplainMessageId ? { ...msg, text: autoExplanation, isTyping: false } : msg
-          )
-        );
-      } catch (error) {
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === autoExplainMessageId ? { ...msg, text: `Error analyzing files: ${error.message}`, isTyping: false } : msg
-          )
-        );
-      } finally {
-        setIsAutoExplaining(false);
-      }
+      event.target.value = null; // Clear the file input so same file can be uploaded again
     }
   };
 
   // Function to clear all selected files and input message
   const clearSelectedFiles = () => {
     setSelectedFiles([]);
-    setInputMessage('');
+    setInputMessage(''); // Also clear the input message when clearing files
   };
 
   // Handle simulated login
@@ -672,6 +667,7 @@ function App() {
                   key={msg.id}
                   className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
+                  {/* Conditionally render file attachment details or regular message content */}
                   {msg.type === 'file_attachment' ? (
                     <div className="max-w-2xl p-4 rounded-xl shadow-md bg-gray-200 text-gray-800 rounded-bl-none">
                       <div className="flex items-center space-x-3 mb-3">
@@ -696,10 +692,10 @@ function App() {
                       }`}
                     >
                       {msg.text}
-                      {msg.isTyping && ( // Simple typing indicator
+                      {msg.isTyping && ( // Simple typing indicator for AI messages
                           <span className="ml-2 animate-pulse">...</span>
                       )}
-                       {msg.hasAdviceButton && (
+                       {msg.hasAdviceButton && !msg.isWordExplanation && ( // Only show advice button if not a word explanation
                         <button
                           className="mt-2 ml-2 bg-green-500 hover:bg-green-600 text-white text-sm py-1 px-3 rounded-lg shadow transition duration-200"
                           onClick={() => handleGetFinancialAdvice(msg.userQueryForAdvice)}
@@ -735,7 +731,7 @@ function App() {
                   value={inputMessage} // Input message is always controlled by inputMessage state
                   onChange={(e) => setInputMessage(e.target.value)}
                   className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-inter text-lg"
-                  placeholder="Ask anything" // Changed placeholder to "Ask anything"
+                  placeholder={selectedFiles.length > 0 ? "Type your question about the files..." : "Ask anything"}
                   disabled={isSendingMessage || isAutoExplaining || isGettingAdvice} // Disable input during AI processing
                 />
                 {selectedFiles.length > 0 && ( // Show clear button only if files are selected
@@ -761,10 +757,10 @@ function App() {
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
                   title="Send Message"
-                  disabled={!inputMessage.trim() || isSendingMessage || isAutoExplaining || isGettingAdvice} // Disable send button if input is empty or AI is busy
+                  disabled={(!inputMessage.trim() && selectedFiles.length === 0) || isSendingMessage || isAutoExplaining || isGettingAdvice} // Disable send button if nothing to send or AI is busy
                 >
                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l.649-.186.936-2.807a1 1 0 00-.186-1.019l-.353-.353A1 1 0 019 11.414V15a1 1 0 001 1h.01a1 1 0 001-1v-3.586a1 1 0 01.293-.707l.353-.353a1 1 0 00.186-1.019l-.936-2.807.649.186a1 1 0 001.169-1.409l-7-14z"></path>
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l.649-.186.936-2.807a1 1 0 00-.186-1.019l-.353-.353A1 1 0 019 11.414V15a1 1 0 001 1h.01a1 1 0 001-1v-3.586a1 1 0 01.293-.707l.353-.353a1 1 0 001.169-1.409l-7-14z"></path>
                   </svg>
                 </button>
               </div>
