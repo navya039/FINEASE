@@ -36,3 +36,87 @@
     transform: rotate(360deg);
   }
 }
+.chatbot-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.chat-window {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.chat-message {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  max-width: 70%;
+}
+.chat-message.user {
+  background: #bae6fd;
+  align-self: flex-end;
+  margin-left: auto;
+}
+.chat-message.bot {
+  background: #e0e7ef;
+  align-self: flex-start;
+  margin-right: auto;
+}
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 1rem;
+}
+.chat-input-row button {
+  background: #38bdf8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.chat-input-row button:hover {
+  background: #0ea5e9;
+}
+.fincompare-tab {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.file-upload-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.compare-result {
+  margin-top: 20px;
+}
+.recommendation {
+  font-weight: bold;
+  color: #0ea5e9;
+  margin-bottom: 12px;
+}
+.doc-summary pre {
+  background: #f1f5f9;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  overflow-x: auto;
+}
+.error {
+  color: #dc2626;
+  font-weight: bold;
+}
